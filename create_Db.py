@@ -58,10 +58,12 @@ def nsides_api(service, method, args = None):
 data = nsides_api('lab', 'ae_to_lab')
 
 ae2loinc = dict()
+loinc2limitval = dict()
 aelist = list()
 
 for r in data['results']:
     ae2loinc[r['adverse_event']] = r['loinc']
+    loinc2limitval[r['loinc']] = (r['limit_value_low'], r['limit_value_high'])
     aelist.append(r['adverse_event'])
 
 aelist = sorted(set(aelist))
@@ -172,17 +174,8 @@ for person_id in tqdm(pt2era.keys()):
 
 # Get the lab test necessary to study the ADVERSE_EVENT_OF_INTEREST
 loinc_code = ae2loinc[ADVERSE_EVENT_OF_INTEREST]
-
-# Get normal range for this lab test
-# range low and high are reversed in the database
-SQL = '''select range_low, range_high
-    from {CONCEPT} c
-    join {MEASUREMENT} m on (c.concept_id = m.measurement_concept_id)
-    where c.concept_code = {loinc_code}
-    limit 1;'''.format(CONCEPT=CONCEPT, MEASUREMENT=MEASUREMENT, loinc_code=loinc_code)
-
-num_results = cur.execute(SQL)
-range_high, range_low = cur.fetchone()
+limit_value_low = int(loinc2limitval[ADVERSE_EVENT_OF_INTEREST][0])
+limit_value_high = int(loinc2limitval[ADVERSE_EVENT_OF_INTEREST][1])
 
 print "Getting all lab tests results"
 pt2labtest = defaultdict(list)
@@ -193,10 +186,10 @@ SQL = '''select p.person_id, date(measurement_date), value_as_number, gender_sou
     join {PERSON} p on (m.person_id = p.person_id)
     join {CONCEPT} c on (c.concept_id = m.measurement_concept_id)
     where c.concept_code = {loinc_code}
-    and (value_as_number >= {range_low}/2 and value_as_number <= {range_high}*2)
+    and (value_as_number >= {limit_value_low} and value_as_number <= {limit_value_high})
     and p.person_id in (select distinct p.person_id
 				from {PERSON}
-				join {DRUG_ERA} using (person_id));'''.format(MEASUREMENT=MEASUREMENT, range_low=range_low, range_high=range_high, PERSON=PERSON, CONCEPT=CONCEPT, loinc_code=loinc_code, DRUG_ERA=DRUG_ERA)
+				join {DRUG_ERA} using (person_id));'''.format(MEASUREMENT=MEASUREMENT, PERSON=PERSON, CONCEPT=CONCEPT, loinc_code=loinc_code, limit_value_low=limit_value_low, limit_value_high=limit_value_high, DRUG_ERA=DRUG_ERA)
 
 num_results = cur.execute(SQL)
 results = cur.fetchall()
