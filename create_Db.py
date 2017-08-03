@@ -174,8 +174,8 @@ for person_id in tqdm(pt2era.keys()):
 
 # Get the lab test necessary to study the ADVERSE_EVENT_OF_INTEREST
 loinc_code = ae2loinc[ADVERSE_EVENT_OF_INTEREST]
-limit_value_low = int(loinc2limitval[ADVERSE_EVENT_OF_INTEREST][0])
-limit_value_high = int(loinc2limitval[ADVERSE_EVENT_OF_INTEREST][1])
+limit_value_low = int(loinc2limitval[loinc_code][0])
+limit_value_high = int(loinc2limitval[loinc_code][1])
 
 print "Getting all lab tests results"
 pt2labtest = defaultdict(list)
