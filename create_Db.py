@@ -26,7 +26,6 @@ import operator
 import csv
 import urllib2
 import json
-import ipdb
 
 from tqdm import tqdm
 
@@ -35,7 +34,7 @@ CONFIG_FILE = "~/.my.cnf"             # log-in credentials for database
 OMOP_CDM_DB = "clinical_gm"             # local OMOP CDM MySQL database
 DRUG_ERA    = "dili_drug_era"             # local OMOP CDM DRUG_ERA table
 CONCEPT     = "clinical_cumc_v5.concept"             # local OMOP CDM CONCEPT table
-PERSON      = "dili_person"             # local OMOP CDM PERSON table
+PERSON      = "clinical_cumc_v5.person"             # local OMOP CDM PERSON table
 MEASUREMENT = "dili_measurements"             #local OMOP CDM MEASUREMENT table
 
 '''
@@ -140,8 +139,7 @@ SQL = '''select * from
         group by drug_concept_id
         order by num_pts desc) d
 
-        where num_pts > {min_num_pts}
-        limit 20;'''.format(DRUG_ERA=DRUG_ERA, CONCEPT=CONCEPT, min_num_pts=min_num_pts)
+        where num_pts > {min_num_pts};'''.format(DRUG_ERA=DRUG_ERA, CONCEPT=CONCEPT, min_num_pts=min_num_pts)
 cur.execute(SQL)
 results = cur.fetchall()
 
@@ -301,9 +299,10 @@ for pt, era in tqdm(pt2labtest_era.iteritems()):
     if pt not in pts:
         continue
 
-    labtest_arr = []
-    for (testdate,testresult) in pt2labtest[pt]:
-        labtest_arr.append(testresult)
+    # labtest_arr = []
+    # for (testdate,testresult) in pt2labtest[pt]:
+    #     labtest_arr.append(testresult)
+    labtest_arr = [for x[1] in pt2labtest[pt]]
     median_testresult = np.median(labtest_arr)
     pt2baseline[pt] = median_testresult
 
