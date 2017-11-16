@@ -24,16 +24,43 @@ import numpy as np
 import random
 import operator
 import csv
+import urllib2
+import json
+import ipdb
 
 from tqdm import tqdm
 
 # Define table names
-CONFIG_FILE = ""             # log-in credentials for database
-OMOP_CDM_DB = ""             # local OMOP CDM MySQL database
-DRUG_ERA    = ""             # local OMOP CDM DRUG_ERA table
-CONCEPT     = ""             # local OMOP CDM CONCEPT table
-PERSON      = ""             # local OMOP CDM PERSON table
-MEASUREMENT = ""             #local OMOP CDM MEASUREMENT table
+CONFIG_FILE = "~/.my.cnf"             # log-in credentials for database
+OMOP_CDM_DB = "clinical_gm"             # local OMOP CDM MySQL database
+DRUG_ERA    = "dili_drug_era"             # local OMOP CDM DRUG_ERA table
+CONCEPT     = "clinical_cumc_v5.concept"             # local OMOP CDM CONCEPT table
+PERSON      = "dili_person"             # local OMOP CDM PERSON table
+MEASUREMENT = "dili_measurements"             #local OMOP CDM MEASUREMENT table
+
+'''
+#############################################################################
+For dili, we know the drugs and the labs.
+
+These have been loaded into EBDB, they should be the first three AEs in the list.
+
+It should also be noted how we determined upper and lower limits of normal:
+UPPER: The ULN values from the Columbia DILI phenotyping algorithm document
+LOWER: The most prevalent 'range_high' (erroneously populated - the column should be named 'range_low') 
+  value in clinical_cumc.measurement. Refer to EBDB.adverse_event_to_lab_test for more details.
+
+Labs: 
+3006923	Alanine aminotransferase serum/plasma	1742-6
+3024128	Total Bilirubin serum/plasma	1975-2
+3035995	Alkaline phosphatase serum/plasma	6768-6
+
+Drugs:
+[everything in clinical_gm.dili_drugs]
+
+Note that we have to remove minimum limit on drug frequency
+#############################################################################
+'''
+
 
 # Get ADVERSE_EVENT_OF_INTEREST and corresponding data through the nsides API
 def nsides_api(service, method, args = None):
@@ -44,7 +71,7 @@ def nsides_api(service, method, args = None):
     method    string, for a list of methods see http://nsideseb-env.us-east-1.elasticbeanstalk.com
     args      dictionary, method parameters see http://nsideseb-env.us-east-1.elasticbeanstalk.com
     """
-    NSIDES_API_URL = 'http://nsideseb-env.us-east-1.elasticbeanstalk.com/api/v1/'
+    NSIDES_API_URL = 'https://www.nsides.io/api/v1/'
 
     base_url = NSIDES_API_URL + 'query?service=%s&meta=%s' % (service, method)
     url = base_url
@@ -68,7 +95,19 @@ for r in data['results']:
 
 aelist = sorted(set(aelist))
 
-ADVERSE_EVENT_OF_INTEREST = aelist[3] #any adverse event from aelist
+ADVERSE_EVENT_OF_INTEREST = aelist[0] #any adverse event from aelist
+
+# ae2loinc = {
+#     u'Alanine aminotransferase serum/plasma': u'1742-6',
+#     u'Total Bilirubin serum/plasma': u'1975-2',
+#     u'Alkaline phosphatase serum/plasma': u'6768-6'
+# }
+
+# aelist = [
+#     u'Alanine aminotransferase serum/plasma',
+#     u'Total Bilirubin serum/plasma',
+#     u'Alkaline phosphatase serum/plasma'
+# ]
 
 # Creation of the database
 print "Creating delta Database for %s ..." %ADVERSE_EVENT_OF_INTEREST
@@ -80,10 +119,18 @@ cur = con.cursor()
 
 # Get drug names
 print "Getting commonly prescribed drugs:",
-min_num_pts = 3000
+min_num_pts = 1
 
 drug2name = dict()
 drugname2concept_id = dict()
+
+# # GET DILI COHORT PATIENTS
+# SQL = '''
+# SELECT DISTINCT MRN as person_id
+# from clinical_gm.dili_phenotype;
+# '''
+# cur.execute(SQL)
+# dili_pts = [x[0] for x in cur.fetchall()]
 
 SQL = '''select * from
         (select drug_concept_id, concept_name as drug, count(distinct person_id) as num_pts
@@ -93,7 +140,8 @@ SQL = '''select * from
         group by drug_concept_id
         order by num_pts desc) d
 
-        where num_pts > {min_num_pts};'''.format(DRUG_ERA=DRUG_ERA, CONCEPT=CONCEPT, min_num_pts=min_num_pts)
+        where num_pts > {min_num_pts}
+        limit 20;'''.format(DRUG_ERA=DRUG_ERA, CONCEPT=CONCEPT, min_num_pts=min_num_pts)
 cur.execute(SQL)
 results = cur.fetchall()
 
@@ -119,8 +167,12 @@ where drug_concept_id in {selected_drugs}
 and gender_source_value in ('M','F')
 and datediff(drug_era_start_date, convert(concat(cast(year_of_birth as CHAR), '-', cast(month_of_birth as CHAR), '-', cast(day_of_birth as CHAR)), date))/365.25 >= 18
 and datediff(drug_era_start_date, convert(concat(cast(year_of_birth as CHAR), '-', cast(month_of_birth as CHAR), '-', cast(day_of_birth as CHAR)), date))/365.25 <= 89;'''.format( DRUG_ERA=DRUG_ERA, PERSON=PERSON, selected_drugs=str(tuple(drug2name.keys())) )
+print ""
+print SQL
+print ""
 cur.execute(SQL)
 results = cur.fetchall()
+
 
 for person_id, sex, race, bday in results:
     pt2sex[person_id] = sex
@@ -130,6 +182,15 @@ for person_id, sex, race, bday in results:
     pt2bday[person_id] = bday
 
 print len(pt2sex), "patients found"
+
+'''
+print "filtering for patients in DILI cohort...",
+pt2sex = [pt for pt in pt2sex if int(pt[0]) in dili_pts]
+for k, v in tqdm(pt2sex.iteritems()):
+    if int(k) in dili_pts:
+        pt2sex_new[k] = v
+print " found {0}".format(len(pt2sex))
+'''
 
 # Get all Rx for all patients on top drugs
 print "Getting prescriptions for patients on top drugs (this may take a while)"
@@ -144,6 +205,9 @@ where drug_concept_id = {drug_concept_id}
 and gender_source_value in ('M','F')
 and datediff(drug_era_start_date, convert(concat(cast(year_of_birth as CHAR), '-', cast(month_of_birth as CHAR), '-', cast(day_of_birth as CHAR)), date))/365.25 >= 18
 and datediff(drug_era_start_date, convert(concat(cast(year_of_birth as CHAR), '-', cast(month_of_birth as CHAR), '-', cast(day_of_birth as CHAR)), date))/365.25 <= 89;'''.format( DRUG_ERA=DRUG_ERA, PERSON=PERSON, drug_concept_id=drug_concept_id)
+    #print ""
+    #print SQL
+    #print ""
 
     num_results = cur.execute(SQL)
 
@@ -185,11 +249,14 @@ SQL = '''select p.person_id, date(measurement_date), value_as_number, gender_sou
     from {MEASUREMENT} m
     join {PERSON} p on (m.person_id = p.person_id)
     join {CONCEPT} c on (c.concept_id = m.measurement_concept_id)
-    where c.concept_code = {loinc_code}
+    where c.concept_code = '{loinc_code}'
     and (value_as_number >= {limit_value_low} and value_as_number <= {limit_value_high})
     and p.person_id in (select distinct p.person_id
 				from {PERSON}
 				join {DRUG_ERA} using (person_id));'''.format(MEASUREMENT=MEASUREMENT, PERSON=PERSON, CONCEPT=CONCEPT, loinc_code=loinc_code, limit_value_low=limit_value_low, limit_value_high=limit_value_high, DRUG_ERA=DRUG_ERA)
+print ""
+print SQL
+print ""
 
 num_results = cur.execute(SQL)
 results = cur.fetchall()
@@ -198,7 +265,7 @@ for person_id,testdate,testresult,sex in tqdm(results):
     if sex in ['M','F']:
         pt2labtest[person_id].append((testdate,int(testresult)))
 
-pt2labtest[patient_id]=sorted(pt2labtest[patient_id])
+#pt2labtest[patient_id]=sorted(pt2labtest[patient_id])
 
 print len(pt2labtest), "patients with lab results"
 
@@ -227,8 +294,11 @@ for pt in tqdm(pt2labtest.keys()):
 print "Calculating baseline %s labtest interval for each patient" %loinc_code
 pt2baseline = dict()
 
-for pt in tqdm(pt2labtest_era):
-    if pt not in pt2sex:
+pts = pt2sex.keys()
+pts = [int(x) for x in pts]
+
+for pt, era in tqdm(pt2labtest_era.iteritems()):
+    if pt not in pts:
         continue
 
     labtest_arr = []
@@ -243,18 +313,19 @@ print len(pt2baseline), "baselines calculated"
 print "Collecting max_testresult per %s labtest era" %loinc_code
 pt2max_test_era = defaultdict(dict)
 
-for pt in tqdm(pt2labtest_era):
-    if pt not in pt2sex:
+
+for pt, era in tqdm(pt2labtest_era.iteritems()):
+    if pt not in pts:
         continue
 
-    for era_num in pt2labtest_era[pt]:
-        if len(pt2labtest_era[pt][era_num]) == 1:
-            (testdate,testresult) = pt2labtest_era[pt][era_num][0]
+    for era_num in era:
+        if len(era[era_num]) == 1:
+            (testdate,testresult) = era[era_num][0]
             pt2max_test_era[pt][era_num] = (testdate,testresult)
         else:
             max_testresult = 0
             max_testdate = ''
-            for (testdate,testresult) in pt2labtest_era[pt][era_num]:
+            for (testdate,testresult) in era[era_num]:
                 if testresult > max_testresult:
                     max_testresult = testresult
                     max_testdate = testdate
@@ -280,17 +351,17 @@ for pt in tqdm(pt2max_test_era):
                 if (post_test_date >= drug_start_date) and (post_test_date-drug_end_date).days <= 36:
                     pt2testdb[pt][era_num,post_test_date,pre_test,post_test].append( (drug_concept_id,drug_start_date,drug_end_date))
 
-
+## JDR: THIS IS FINE TO KEEP, ALTHOUGH UNNECESSARY
 # Calculate median drug effect to assign swap frequency
 print "Binning drugs by effect (median delta)"
 drug2deltas = defaultdict(list) # all deltas for a drug
 drug2change = dict() # median delta per drug
 
-for person_id in tqdm(pt2testdb.keys()):
-    if len(pt2testdb[person_id]) == 0:
+for person_id, tests in tqdm(pt2testdb.iteritems()):
+    if len(tests) == 0:
         continue
-    for pt_era_orig,post_test_date,pre_test,post_test in pt2testdb[person_id]:
-        for (drug_concept_id, drug_start_date,drug_end_date) in pt2qtdb[person_id][pt_era_orig,post_test_date,pre_test,post_test]:
+    for pt_era_orig,post_test_date,pre_test,post_test in tests:
+        for (drug_concept_id, drug_start_date,drug_end_date) in tests[pt_era_orig,post_test_date,pre_test,post_test]:
             drug2deltas[drug_concept_id].append(post_test-pre_test)
 
 drug_changes = []
@@ -311,6 +382,8 @@ for bin_ind_, drug in zip(bin_ind,sorted(drug2change.keys())):
     drug2bin[drug] = bin_ind_
     #print "%2d" %bin_ind_, '\t', "%15s" %drug2name[drug][0:15],'\t', "%.1f" %drug2change[drug],'\t', len(drug2deltas[drug])
 
+# JDR: WE SHOULD COMPLETELY DISREGARD ALL SWAPPING PROCEDURES
+'''
 # Calculate swap frequency such that drugs with a greater effect get swapped less frequently
 print "Calculating swap frequencies"
 keys = [10-i for i in range(10)]
@@ -329,10 +402,13 @@ for bin_ind_ in sorted(bin2drugs.keys()):
 # Define eras to swap
 print "Defining candidate labtest eras for drug swap"
 pt_list_swap = [pt for pt in pt2testdb.keys() if len(pt2testdb[pt]) != 0]
+'''
 
 eras_to_remove = dict()
 eras_to_add = dict()
 
+# JDR: THIS IS MORE SWAPPING STUFF
+'''
 for swap_drug in tqdm(drug2num_swap.keys()):
     random.shuffle(pt_list_swap)
     num_swap = drug2num_swap[swap_drug]
@@ -383,6 +459,7 @@ for person_id in tqdm(pt2testdb.keys()):
         for drug in eras_to_add.keys():
             if (person_id, pt_era_orig) in eras_to_add[drug]:
                 pt2testdb_swap[person_id][pt_era_orig,post_test_date,pre_test,post_test].append((drug, "swap","swap"))
+'''
 
 # Function for randomly adjusting age +/- 0-5 years
 def shuffle_age(test_date,bday,prev_age=None):
@@ -419,7 +496,7 @@ outf.close()
 # Save Db to csv
 outf_dem = open('%s_db_Patient.csv'%loinc_code,'w')
 writer_dem = csv.writer(outf_dem)
-writer_dem.writerow(['pt_id_era', 'pt_id', 'era', 'age', 'sex', 'race', 'num_drugs', 'pre_test_high', 'post_test_high', 'delta_test'])
+writer_dem.writerow(['pt_id_era', 'pt_id', 'era', 'age', 'sex', 'race', 'num_drugs', 'pre_test', 'post_test', 'delta_test'])
 
 outf_drug = open('%s_db_Patient2Drug.csv'%loinc_code,'w')
 writer_drug = csv.writer(outf_drug)
@@ -429,38 +506,82 @@ outf_anon = open('%s_db.csv'%loinc_code,'w')
 writer_anon = csv.writer(outf_anon)
 writer_anon.writerow(['pt_id_era', 'pt_id', 'era', 'age', 'sex', 'race', 'num_drugs', 'drug_concept_id', 'drug_name', 'pre_test_high', 'post_test_high', 'delta_test'])
 
-pt_list = [pt for pt in pt2testdb_swap.keys() if len(pt2testdb_swap[pt]) != 0]
-random.shuffle(pt_list)
-for i,person_id in tqdm(enumerate(pt_list), total=len(pt_list)):
+#pt_list = [pt for pt in pt2testdb_swap.keys() if len(pt2testdb_swap[pt]) != 0]
+pt_list = [pt for pt in pt2testdb.keys() if len(pt2testdb[pt]) != 0]
+
+
+for i, person_id in tqdm(enumerate(pt_list), total=len(pt_list)):
     pt_era = 0
-    prev_age = None
-    for pt_era_orig,post_test_date,pre_test,post_test in pt2testdb_swap[person_id]:
+    for pt_era_orig, post_test_date, pre_test, post_test in pt2testdb[person_id]:
         pt_era += 1
-        pt_age = shuffle_age(post_test_date, pt2bday[person_id], prev_age)
-
-        prev_age = pt_age
-
+        pt_age = pt2bday[str(person_id)]
         drug_set = set()
-        for (drug_concept_id, drug_start_date,drug_end_date) in pt2testdb_swap[person_id][pt_era_orig,post_test_date,pre_test,post_test]:
+        for (drug_concept_id, drug_start_date, drug_end_date) in pt2testdb[person_id][pt_era_orig,post_test_date,pre_test,post_test]:
             drug_set.add(drug_concept_id)
-
         num_drugs = len(drug_set)
 
-        pre_test_high = 0
-        post_test_high = 0
-        if pre_test >= range_high:
-            pre_test_high = 1
-        if post_test >= range_high:
-            post_test_high = 1
-
-        writer_dem.writerow(['%d_%d' %(i+1,pt_era), i+1, pt_era, pt_age, pt2sex[person_id], pt2race[person_id], num_drugs, pre_test_high, post_test_high, post_test-pre_test])
+        writer_dem.writerow(['%d_%d'%(person_id,pt_era),
+                             person_id,
+                             pt_era,
+                             pt_age,
+                             pt2sex[str(person_id)],
+                             pt2race[str(person_id)],
+                             num_drugs,
+                             pre_test,
+                             post_test,
+                             pre_test-post_test])
 
         for drug_concept_id in drug_set:
-            writer_drug.writerow(['%d_%d' %(i+1,pt_era), drug_concept_id])
+            writer_drug.writerow(['%d_%d'%(person_id,pt_era),
+                                  drug_concept_id])
+            writer_anon.writerow(['%d_%d'%(person_id,pt_era),
+                                  person_id,
+                                  pt_era,
+                                  pt_age,
+                                  pt2sex[str(person_id)],
+                                  pt2race[str(person_id)],
+                                  num_drugs,
+                                  drug_concept_id,
+                                  drug2name[drug_concept_id],
+                                  pre_test,
+                                  post_test,
+                                  post_test-pre_test])
+                                  
+                    
 
-            writer_anon.writerow(['%d_%d' %(i+1,pt_era), i+1, pt_era, pt_age, pt2sex[person_id], pt2race[person_id], num_drugs,
-                                  drug_concept_id, drug2name[drug_concept_id],
-                                  pre_test_high, post_test_high, post_test-pre_test])
+# #random.shuffle(pt_list)
+# for i,person_id in tqdm(enumerate(pt_list), total=len(pt_list)):
+#     pt_era = 0
+#     #prev_age = None
+#     for pt_era_orig,post_test_date,pre_test,post_test in pt2testdb[person_id]:
+#         pt_era += 1
+#         #pt_age = shuffle_age(post_test_date, pt2bday[person_id], prev_age)
+#         pt_age = pt2bday[str(person_id)]
+
+#         #prev_age = pt_age
+
+#         drug_set = set()
+#         for (drug_concept_id, drug_start_date,drug_end_date) in pt2testdb[person_id][pt_era_orig,post_test_date,pre_test,post_test]:
+#             drug_set.add(drug_concept_id)
+
+#         num_drugs = len(drug_set)
+
+#         # pre_test_high = 0
+#         # post_test_high = 0
+#         # if pre_test >= range_high:
+#         #     pre_test_high = 1
+#         # if post_test >= range_high:
+#         #     post_test_high = 1
+
+#         writer_dem.writerow(['%d_%d' %(i+1,pt_era), i+1, pt_era, pt_age, pt2sex[person_id], pt2race[person_id], num_drugs, pre_test_high, post_test_high, post_test-pre_test])
+
+#         for drug_concept_id in drug_set:
+#             writer_drug.writerow(['%d_%d' %(i+1,pt_era), drug_concept_id])
+
+#             writer_anon.writerow(['%d_%d' %(i+1,pt_era), i+1, pt_era, pt_age, pt2sex[person_id], pt2race[person_id], num_drugs,
+#                                   drug_concept_id, drug2name[drug_concept_id],
+#                                   pre_test_high, post_test_high, post_test-pre_test])
+        
 
 outf_dem.close()
 outf_drug.close()
