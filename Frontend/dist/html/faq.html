@@ -1,0 +1,89 @@
+<!-- deltaQT Database - FAQ, Updated July 28, 2017
+
+Copyright (C) 2017, Tatonetti Lab
+Tal Lorberbaum <tal.lorberbaum@columbia.edu>
+Victor Nwankwo <vtn2106@cumc.columbia.edu>
+Nicholas P. Tatonetti <nick.tatonetti@columbia.edu>
+Julie Prost <jap2277@columbia.edu>
+All rights reserved.
+
+This site is released under a CC BY-NC-SA 4.0 license.
+For full license details see LICENSE.txt at
+https://github.com/tatonetti-lab/deltalab or go to:
+http://creativecommons.org/licenses/by-nc-sa/4.0/
+-->
+
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FAQ | ∆Lab</title>
+    <meta name="viewport" content="initial-scale=1.0,user-scalable=no,maximum-scale=1,width=device-width">
+    <meta name="keywords" content="qt interval, ecg, react,reactjs, d3js, visualization,javascript">
+    <meta name="description" content="A resource for exploring drug-induced adverse events.">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-icon" href="/index/img/apple-touch-icon.png">
+    <link rel="shortcut icon" href="/index/img/favicon.ico">
+    <link rel="stylesheet" href="/index/css/style.css">
+</head>
+
+  <body>
+    <div class="faq">
+      <h1 style="padding:0; margin:0;"><a href="/"><img src="/index/img/qt-web-logo.svg" style="height:50px;vertical-align:middle;" /></a> <span style="vertical-align:middle; display:inline-block;">∆QT Database</span></h1>
+
+      <h2>Frequently Asked Questions</h2>
+
+      <ul>
+        <li><a href="#what-is-qtdb">What is ∆Lab?</a></li>
+        <li><a href="#drug-not-present">Why is my drug not in the database?</a></li>
+        <li><a href="#data-processing">Where did the data come from?</a></li>
+        <li><a href="#using-the-data">How can I use these data?</a></li>
+
+      </ul>
+
+      <a class="anchor" id="what-is-qtdb"></a>
+      <p><b>What is ∆Lab?</b><br>∆Lab is a publicly available resource for exploring the effects of one or more drugs on a set of different labtests.</p>
+
+      <p>This website provides a front-facing interface for users to investigate one or more drugs and drug classes. You can save the resulting plot, the subset of data currently viewed, or the entire database. All source code for the site is available on <a href="https://github.com/tatonetti-lab/deltalab" target="_blank">GitHub</a>.</p>
+
+      <a class="anchor" id="drug-not-present"></a>
+      <p><b>Why is my drug not in the database?</b><br>∆Lab only includes 259 commonly prescribed drugs at NewYork-Presbyterian Hospital to ensure patient privacy. If the drug(s) you are interested in studying are not included, email Nick Tatonetti to discuss a potential collaboration where we can provide evidence using our entire electronic health record; in these cases we will not be able to share the underlying data.</p>
+
+      <a class="anchor" id="data-processing"></a>
+      <p><b>Where did the data come from?</b><br>The ∆Lab Database is a deidentified subset of electronic health record data originally collected at NewYork-Presbyterian Hospital/ Columbia University Medical Center and mapped to the <a href="http://www.ohdsi.org/web/wiki/doku.php?id=documentation:cdm:single-page" target="_blank">OHDSI Common Data Model</a>. To prepare the data for public release we performed the following deidentification procedure (available as a Python script on <a href="https://github.com/tatonetti-lab/deltalab/blob/master/create_Db.py" target="_blank">GitHub</a>):</p>
+      <ol>
+        <li>Removed 18 <a href="https://www.hhs.gov/hipaa/for-professionals/privacy/special-topics/de-identification/#safeharborguidance" target="_blank">HIPAA Safe Harbor identifiers</a>.</li>
+        <li>Only included patients taking one or more commonly prescribed drugs (>3000 patients prescribed drug in EHR, N=259) and with at least 2 labtests.</li>
+        <li>Excluded patients younger than 18 or older than 89 at time of labtest; randomly adjusted age ±0-5 years.</li>
+        <li>Defined global baseline for each patient: median labtests value across all of that patient's labtests.</li>
+        <li>Defined one or more "Labtest era"s for each patient: one or more labtests combined into an era, such that each subsequent labtest occurs no more than 36 days after the previous one (otherwise create new Labtest era). For each Labtest era, defined maxLabtest as the labtest date with the highest labtest value.</li>
+        <li>Collected all drugs a patient was taking 0-36 days inclusive before the maxLabtest date.</li>
+        <li>Randomly swapped small subset of drug exposures from one patient to another to further deidentify the data. 6.5% of patients had at least one swapped drug. To perform swap:</li>
+        <ul>
+          <li>For each drug, calculated median delta in labtest values (maxLabtest value – baseline labtest value) across all labtest eras for all patients.</li>
+          <li>Binned distribution of median delta into 10 bins.</li>
+          <li>Assigned decreasing swap frequency (max: 1% for drugs with small effects on labtest value; min: 1/1000% for drugs with large effect on labtest value).</li>
+          <li>Randomly swapped (<span class="code">bin_swap_frequency</span> &times; <span class="code">num_drug_exposures</span>) from one patient Labtest era containing the drug to another patient Labtest era not containing the drug.</li>
+        </ul>
+        <li>Each entry in the database then contains:</li>
+        <ul>
+          <li><span class="code">pt_id_era</span>: concatenated <span class="code">pt_id</span> and <span class="code">era</span></li>
+          <li><span class="code">pt_id</span>: database-specific arbitrary patient ID</li>
+          <li><span class="code">era</span>: "ECG era" for linking all drug exposures up to 36 days before post-exposure ECG</li>
+          <li><span class="code">age, sex</span>: patient age at time of post-exposure ECG, sex</li>
+          <li><span class="code">race</span>: self-reported race; <b>W</b>hite, <b>B</b>lack, <b>O</b>ther (including Hispanic)</li>
+          <li><span class="code">num_drugs</span>: number of drugs taken by patient in the given "ECG era"</li>
+          <li><span class="code">drug_concept_id, drug_name</span>: numerical drug identifier (OHDSI), drug name</li>
+          <li><span class="code">pre_test_high</span>: &nbsp;value of 1 indicates baseline labtest ≥ normal range for this labtest</li>
+          <li><span class="code">post_test_high</span>: value of 1 indicates post-drug exposure labtest ≥ normal range for this labtest</li>
+          <li><span class="code">delta_test</span>: change in labtest value from baseline to post-drug exposure</li>
+        </ul>
+      </ol>
+
+      <a class="anchor" id="using-the-data"></a>
+      <p><b>How can I use these data?</b><br>We are providing ∆Lab as a publicly available dataset to enable researchers, clinicians, and patients to have access to investigate the effects of drug(s) of interest or to conduct new data mining studies.<!-- ∆QT Database can be cited using: --></p>
+
+    </div>
+  </body>
+</html>

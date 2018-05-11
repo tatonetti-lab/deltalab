@@ -138,3 +138,28 @@ p {
   fill: #999;
   font: 9px sans-serif;
 }
+
+.faq {
+  padding: 50px;
+  padding-top: 20px;
+  font-size: 1.3em;
+}
+
+.jslink {
+  cursor: pointer;
+  color: blue;
+}
+
+.plots div {
+  display:flex;
+  flex-direction:column;
+  align-items: center;
+}
+
+@media screen and (min-width: 768px) {
+  .plots div {
+      display:flex;
+      flex-direction:row;
+      flex-wrap:nowrap;
+  }
+}

@@ -1,1 +1,5 @@
 my.cnf
+.vscode
+.eslintrc
+node_modules
+bundle.js

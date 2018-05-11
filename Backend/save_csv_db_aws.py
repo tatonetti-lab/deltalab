@@ -54,7 +54,7 @@ join
      from {DATABASE}.Patient{suffix} p\n'''.format(DATABASE=DATABASE, suffix=table_suffix)
 
         for i in range(len(drugs)):
-            SQL += '''     join {DATABASE}.Patient2Drug%s d%d using (pt_id_era)\n'''.format(DATABASE=DATABASE) %table_suffix, (i+1))
+            SQL += '''     join {DATABASE}.Patient2Drug%s d%d using (pt_id_era)\n'''.format(DATABASE=DATABASE) % (table_suffix, (i+1))
 
 
         for i in range(len(drugs)):

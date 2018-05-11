@@ -11,7 +11,7 @@
 // https://github.com/tal-baum/deltaQTDb or go to:
 // http://creativecommons.org/licenses/by-nc-sa/4.0/
 
-var background_deltas_MF = {"min": -113, "max": 150,
+const background_deltas_MF = {"min": -113, "max": 150,
 "bins": [{"x0": -110, "x1": -100, "value": 0.001744},
 {"x0": -100, "x1": -90, "value": 0.006103},
 {"x0": -90, "x1": -80, "value": 0.009590},
@@ -40,7 +40,7 @@ var background_deltas_MF = {"min": -113, "max": 150,
 {"x0": 140, "x1": 150, "value": 0.582379},
 ]};
 
-var background_deltas_M = {"min": -106, "max": 150,
+const background_deltas_M = {"min": -106, "max": 150,
 "bins": [{"x0": -110, "x1": -100, "value": 0.003475},
 {"x0": -100, "x1": -90, "value": 0.001737},
 {"x0": -90, "x1": -80, "value": 0.005212},
@@ -69,7 +69,7 @@ var background_deltas_M = {"min": -106, "max": 150,
 {"x0": 140, "x1": 150, "value": 0.635891},
 ]};
 
-var background_deltas_F = {"min": -113, "max": 150,
+const background_deltas_F = {"min": -113, "max": 150,
 "bins": [{"x0": -110, "x1": -100, "value": 0.000000},
 {"x0": -100, "x1": -90, "value": 0.010500},
 {"x0": -90, "x1": -80, "value": 0.013999},
@@ -98,3 +98,15 @@ var background_deltas_F = {"min": -113, "max": 150,
 {"x0": 140, "x1": 150, "value": 0.528480},
 ]};
 
+const all = {
+  background_deltas_F,
+  background_deltas_M,
+  background_deltas_MF
+};
+
+export default all;
+export {
+  background_deltas_F,
+  background_deltas_M,
+  background_deltas_MF
+};

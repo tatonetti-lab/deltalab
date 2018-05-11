@@ -1,0 +1,3 @@
+bottle==0.12.13
+PyMySQL==0.8.0
+MySQLdb

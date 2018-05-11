@@ -11,7 +11,7 @@
 // https://github.com/tal-baum/deltaQTDb or go to:
 // http://creativecommons.org/licenses/by-nc-sa/4.0/
 
-var drugs = [
+const drugs = [
 { value: '(1309944|1314002|1346823|1326303|989878|1307046|1353766)', label: 'Antiarrhythmics' },
     { value: '1309944', label: 'Amiodarone (Cordarone)' },
     { value: '1314002', label: 'Atenolol (Tenormin)' },
@@ -486,3 +486,5 @@ var drugs = [
 { value: '19044522', label: 'Zinc sulfate' },
 // { value: '744740', label: 'Zolpidem (Ambien)' },
 ];
+
+export default drugs;

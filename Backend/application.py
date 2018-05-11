@@ -22,14 +22,10 @@ import pymysql
 import query_db_aws
 import save_csv_db_aws
 
-
-@route('/')
-def index():
-    return static_file("db.html", root='')
-
-@route('/faq')
-def faq():
-    return static_file("faq.html", root='')
+DIST = '../Frontend/dist'
+HTML = DIST + '/html'
+CSS = DIST + '/css'
+IMG = DIST + '/img'
 
 #@route('/example_use')
 #def example_use():
@@ -37,11 +33,11 @@ def faq():
 
 @route('/index/css/<cssfile>')
 def static_css(cssfile):
-    return static_file(cssfile, root='index/css/')
+    return static_file(cssfile, root=CSS)
 
 @route('/index/img/<imgfile>')
 def static_img(imgfile):
-    return static_file(imgfile, root='index/img/')
+    return static_file(imgfile, root=IMG)
 
 @route('/index/fonts/<fontfile>')
 def static_font(fontfile):
@@ -102,8 +98,17 @@ def api_call_csv():
 
         return partial_csv
 
+@route("/")
+@route('/<path:path>')
+def index(path):
+    return static_file("db.html", root=HTML)
+
+@route('/faq')
+def faq():
+    return static_file("faq.html", root=HTML)
+
 
 application = default_app()
 
 if __name__ == '__main__':
-    application.run(host='0.0.0.0') #, debug=True)
+    application.run(host='0.0.0.0', debug=True) #, debug=True)

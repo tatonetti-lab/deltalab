@@ -719,3 +719,12 @@ var Chart = React.createClass({
         }
     }
 })
+
+const all = {
+  Chart
+};
+
+export default all;
+export {
+  Chart
+}
