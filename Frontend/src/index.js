@@ -43,8 +43,6 @@ let app = (
             <Route exact path="/" render={() => {
               return <Main/>;
             }}/>
-            
-            
             <Route path="*" component={Handle404} status={404}/>
           </Switch>
         }
